@@ -1,7 +1,7 @@
 // Wallet sign-in: GET ?wallet= -> nonce + message; POST {wallet, signature} -> session token.
 // GET ?action=me -> current session user.
 import crypto from 'node:crypto';
-import { run, fail, cmd, isPubkey, verifyEd25519, makeToken, getUserRaw, publicUser } from './_lib.js';
+import { run, fail, cmd, pipe, isPubkey, verifyEd25519, makeToken, getUserRaw, publicUser, isOfficial, OFFICIAL_HANDLE } from './_lib.js';
 
 function message(wallet, nonce, host) {
   return [
@@ -13,6 +13,23 @@ function message(wallet, nonce, host) {
     `Nonce: ${nonce}`,
     `Issued: ${new Date().toISOString()}`,
   ].join('\n');
+}
+
+// First sign-in from the official wallet creates the @y account, verified.
+async function createOfficial(wallet, existing) {
+  const taken = await cmd('GET', 'h:' + OFFICIAL_HANDLE);
+  if (taken && taken !== wallet) return existing;
+  const u = {
+    ...(existing || {}), wallet, handle: OFFICIAL_HANDLE, name: 'Y', bio: 'X locked your coin. Post it on Y. The timeline for memecoins.',
+    avatar: '/y.png', banner: '/y-banner.jpg', joined: existing?.joined || Date.now(), devCoins: existing?.devCoins || [], verified: Date.now(),
+  };
+  await pipe([
+    ['SET', 'h:' + OFFICIAL_HANDLE, wallet],
+    ['SET', 'u:' + wallet, JSON.stringify(u)],
+    ['ZADD', 'handles', 0, OFFICIAL_HANDLE],
+    ['ZADD', 'z:followers', 0, wallet],
+  ]);
+  return u;
 }
 
 export default async function handler(req, res) {
@@ -42,7 +59,8 @@ export default async function handler(req, res) {
     const msg = await cmd('GETDEL', `nonce:${wallet}`);
     if (!msg) fail(401, 'Sign-in request expired. Try again.');
     if (!verifyEd25519(wallet, msg, sig)) fail(401, 'Signature did not match this wallet');
-    const u = await getUserRaw(wallet);
+    let u = await getUserRaw(wallet);
+    if (isOfficial(wallet) && !(u && u.handle)) u = await createOfficial(wallet, u);
     return { token: makeToken(wallet), wallet, user: u && u.handle ? publicUser(u) : null };
   });
 }

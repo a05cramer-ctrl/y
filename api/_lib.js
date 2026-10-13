@@ -189,13 +189,20 @@ export const hashObj = (arr) => {
 export const parse = (s) => { if (!s) return null; try { return JSON.parse(s); } catch { return null; } };
 
 /* ---------------- users ---------------- */
-export const RESERVED = new Set(['newpairs', 'y', 'admin', 'support', 'dev']);
+export const RESERVED = new Set(['newpairs', 'y', 'admin', 'support', 'dev', 'official', 'team']);
+// The official @y account belongs to this wallet (OFFICIAL_WALLET, else TREASURY).
+export const OFFICIAL = () => { const w = process.env.OFFICIAL_WALLET || process.env.TREASURY || ''; return isPubkey(w) ? w : ''; };
+export const isOfficial = (w) => !!w && w === OFFICIAL();
+export const OFFICIAL_HANDLE = 'y';
+// Site-hosted images the official account may use.
+const SITE_IMGS = new Set(['/y.png', '/og.jpg', '/y-mark.png', '/y-banner.jpg']);
 export function publicUser(u) {
   if (!u) return null;
   return {
     wallet: u.wallet, handle: u.handle, name: u.name || u.handle, bio: u.bio || '',
     avatar: u.avatar || '', banner: u.banner || '', joined: u.joined || 0,
-    verified: !!u.verified, verifiedAt: u.verified || 0, devCoins: Array.isArray(u.devCoins) ? u.devCoins : [],
+    verified: !!u.verified || isOfficial(u.wallet), verifiedAt: u.verified || 0, devCoins: Array.isArray(u.devCoins) ? u.devCoins : [],
+    official: isOfficial(u.wallet),
   };
 }
 export async function getUserRaw(wallet) { return parse(await cmd('GET', 'u:' + wallet)); }
@@ -325,6 +332,6 @@ export function slimCoin(t) {
 
 export const IPFS_PREFIX = 'https://ipfs.filebase.io/ipfs/';
 export const LOCAL_IMG_PREFIX = '/api/upload?id=';
-export const okImageUrl = (u) => !u || (typeof u === 'string' && u.length < 200 && (
+export const okImageUrl = (u) => !u || (typeof u === 'string' && u.length < 200 && (SITE_IMGS.has(u) ||
   (u.startsWith(IPFS_PREFIX) && /^[A-Za-z0-9]+$/.test(u.slice(IPFS_PREFIX.length))) ||
   (u.startsWith(LOCAL_IMG_PREFIX) && /^[a-f0-9]{24}$/.test(u.slice(LOCAL_IMG_PREFIX.length)))));

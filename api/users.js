@@ -1,6 +1,6 @@
 // Users: lookup, search, who-to-follow, profile create/edit, follow/unfollow, follower lists.
 import {
-  run, fail, cmd, pipe, parse, isPubkey, publicUser, getUserRaw, getUsersRaw, RESERVED, notify, okImageUrl,
+  run, fail, cmd, pipe, parse, isPubkey, publicUser, getUserRaw, getUsersRaw, RESERVED, notify, okImageUrl, isOfficial, OFFICIAL_HANDLE,
 } from './_lib.js';
 
 const HANDLE_RE = /^[a-z0-9_]{3,15}$/;
@@ -28,8 +28,9 @@ async function byHandle(handle) {
 async function saveProfile(viewer, body) {
   const existing = await getUserRaw(viewer);
   const handle = String(body.handle ?? existing?.handle ?? '').toLowerCase().trim();
-  if (!HANDLE_RE.test(handle)) fail(400, 'Handle must be 3–15 characters: a–z, 0–9 and _');
-  if (RESERVED.has(handle)) fail(409, '@' + handle + ' is reserved');
+  const offY = isOfficial(viewer) && handle === OFFICIAL_HANDLE;
+  if (!offY && !HANDLE_RE.test(handle)) fail(400, 'Handle must be 3–15 characters: a–z, 0–9 and _');
+  if (!offY && RESERVED.has(handle)) fail(409, '@' + handle + ' is reserved');
   const name = clean(body.name ?? existing?.name ?? handle, 50) || handle;
   const bio = clean(body.bio ?? existing?.bio ?? '', 160);
   const avatar = body.avatar !== undefined ? String(body.avatar || '') : existing?.avatar || '';
@@ -46,7 +47,7 @@ async function saveProfile(viewer, body) {
   }
   const u = {
     ...(existing || {}), wallet: viewer, handle, name, bio, avatar, banner,
-    joined: existing?.joined || Date.now(), devCoins: existing?.devCoins || [], verified: existing?.verified || 0,
+    joined: existing?.joined || Date.now(), devCoins: existing?.devCoins || [], verified: existing?.verified || (isOfficial(viewer) ? Date.now() : 0),
   };
   const followers = await cmd('SCARD', 'fs:' + viewer);
   await pipe([
@@ -97,6 +98,7 @@ export default async function handler(req, res) {
       }
       if (q.available !== undefined) {
         const h = String(q.available).toLowerCase();
+        if (h === OFFICIAL_HANDLE && isOfficial(viewer)) return { available: true, reason: '' };
         if (!HANDLE_RE.test(h)) return { available: false, reason: '3–15 characters: a–z, 0–9 and _' };
         if (RESERVED.has(h)) return { available: false, reason: 'Reserved' };
         const w = await cmd('GET', 'h:' + h);
@@ -125,7 +127,7 @@ export default async function handler(req, res) {
           const f = await pipe(us.map(u => ['SISMEMBER', 'f:' + viewer, u.wallet]));
           us = us.filter((_, i) => !+f[i]);
         }
-        us.sort((a, b) => (b.verified ? 1 : 0) - (a.verified ? 1 : 0));
+        us.sort((a, b) => ((b.official ? 2 : 0) + (b.verified ? 1 : 0)) - ((a.official ? 2 : 0) + (a.verified ? 1 : 0)));
         return { users: await withCounts(us.slice(0, n), viewer) };
       }
       fail(400, 'Missing query');
