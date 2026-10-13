@@ -112,9 +112,12 @@ export function verifyEd25519(walletB58, message, sigB58) {
 
 /* ---------------- sessions ---------------- */
 function secret() {
+  // SESSION_SECRET if set; otherwise derived from the database token, which is already server-only.
   const s = process.env.SESSION_SECRET;
-  if (!s) fail(503, 'Server is missing SESSION_SECRET');
-  return s;
+  if (s) return s;
+  const c = redisCfg();
+  if (!c) fail(503, 'Server is missing its database (UPSTASH_REDIS_REST_URL)');
+  return crypto.createHmac('sha256', c.token).update('y-session-v1').digest('base64url');
 }
 const hmac = (p) => crypto.createHmac('sha256', secret()).update(p).digest('base64url');
 export function makeToken(wallet) {
@@ -122,7 +125,7 @@ export function makeToken(wallet) {
   return p + '.' + hmac(p);
 }
 export function readToken(t) {
-  if (!t || typeof t !== 'string' || !process.env.SESSION_SECRET) return null;
+  if (!t || typeof t !== 'string' || !(process.env.SESSION_SECRET || redisCfg())) return null;
   const [p, s] = t.split('.');
   if (!p || !s) return null;
   const a = Buffer.from(hmac(p)); const b = Buffer.from(s);
@@ -267,9 +270,10 @@ export async function hydrate(entries, viewer) {
 /* ---------------- solana / helius ---------------- */
 export const LAMPORTS = 1_000_000_000;
 export async function rpc(method, params) {
+  // Helius when a key is set; the public Solana RPC otherwise (slower, rate limited, but works).
   const key = process.env.HELIUS_API_KEY;
-  if (!key) fail(503, 'Server is missing HELIUS_API_KEY');
-  const r = await fetch('https://mainnet.helius-rpc.com/?api-key=' + encodeURIComponent(key), {
+  const url = key ? 'https://mainnet.helius-rpc.com/?api-key=' + encodeURIComponent(key) : (process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
+  const r = await fetch(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
   });
@@ -309,4 +313,7 @@ export function slimCoin(t) {
 }
 
 export const IPFS_PREFIX = 'https://ipfs.filebase.io/ipfs/';
-export const okImageUrl = (u) => !u || (typeof u === 'string' && u.startsWith(IPFS_PREFIX) && /^[A-Za-z0-9]+$/.test(u.slice(IPFS_PREFIX.length)) && u.length < 200);
+export const LOCAL_IMG_PREFIX = '/api/upload?id=';
+export const okImageUrl = (u) => !u || (typeof u === 'string' && u.length < 200 && (
+  (u.startsWith(IPFS_PREFIX) && /^[A-Za-z0-9]+$/.test(u.slice(IPFS_PREFIX.length))) ||
+  (u.startsWith(LOCAL_IMG_PREFIX) && /^[a-f0-9]{24}$/.test(u.slice(LOCAL_IMG_PREFIX.length)))));
