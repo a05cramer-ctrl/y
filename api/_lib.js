@@ -54,6 +54,11 @@ export async function readJson(req) {
 }
 
 // Wraps a route: parses query, viewer session, catches errors into JSON.
+const EDGE_TTL = { coin: 30, posts: 5, users: 15, verify: 60 };
+function edgeTtl(req) {
+  const m = /^\/(?:api\/)?([a-z]+)/.exec(String(req.url || ''));
+  return (m && EDGE_TTL[m[1]]) || 0;
+}
 export async function run(req, res, fn) {
   try {
     const query = getQuery(req);
@@ -64,7 +69,12 @@ export async function run(req, res, fn) {
       auth: () => { if (!viewer) fail(401, 'Sign in with your wallet first'); return viewer; },
     };
     const out = await fn(ctx);
-    if (out !== undefined) send(res, 200, out);
+    if (out !== undefined) {
+      // Anonymous public reads are cached at Vercel's edge, so floods hit the CDN, not the database.
+      const ttl = ctx.method === 'GET' && !viewer && !(req.headers?.authorization) ? edgeTtl(req) : 0;
+      if (ttl) res.setHeader('Cache-Control', `public, max-age=0, s-maxage=${ttl}, stale-while-revalidate=${ttl * 6}`);
+      send(res, 200, out);
+    }
   } catch (e) {
     if (e instanceof HttpError) return send(res, e.status, { error: e.message, ...(e.extra || {}) });
     console.error(e);
