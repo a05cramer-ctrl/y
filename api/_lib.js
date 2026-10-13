@@ -149,9 +149,20 @@ function redisCfg() {
   return url && token ? { url: url.replace(/\/+$/, ''), token } : null;
 }
 export const hasRedis = () => !!redisCfg();
+// Every key gets a prefix so Y can share a database with other projects safely.
+const KP = process.env.KEY_PREFIX ?? 'y:';
+const MULTI = new Set(['MGET', 'DEL', 'EXISTS', 'UNLINK']);
+function nsArgs(args) {
+  const a = args.map(String);
+  if (!KP || a.length < 2) return a;
+  const c = a[0].toUpperCase();
+  if (MULTI.has(c)) return [a[0], ...a.slice(1).map(k => KP + k)];
+  a[1] = KP + a[1];
+  return a;
+}
 export async function cmd(...args) {
   const c = redisCfg(); if (!c) fail(503, 'Server is missing its database (UPSTASH_REDIS_REST_URL)');
-  const r = await fetch(c.url, { method: 'POST', headers: { Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(args.map(String)) });
+  const r = await fetch(c.url, { method: 'POST', headers: { Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(nsArgs(args)) });
   const j = await r.json().catch(() => ({ error: 'bad redis response ' + r.status }));
   if (j.error) throw new Error('redis: ' + j.error);
   return j.result;
@@ -163,7 +174,7 @@ export async function pipe(cmds) {
   const out = [];
   for (let i = 0; i < cmds.length; i += 800) {
     const chunk = cmds.slice(i, i + 800);
-    const r = await fetch(c.url + '/pipeline', { method: 'POST', headers: { Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(chunk.map(x => x.map(String))) });
+    const r = await fetch(c.url + '/pipeline', { method: 'POST', headers: { Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(chunk.map(nsArgs)) });
     const j = await r.json().catch(() => null);
     if (!Array.isArray(j)) throw new Error('redis pipeline failed ' + r.status);
     for (const x of j) out.push(x && 'result' in x ? x.result : null);
