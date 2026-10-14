@@ -199,7 +199,7 @@ export const hashObj = (arr) => {
 export const parse = (s) => { if (!s) return null; try { return JSON.parse(s); } catch { return null; } };
 
 /* ---------------- users ---------------- */
-export const RESERVED = new Set(['newpairs', 'y', 'admin', 'support', 'dev', 'official', 'team']);
+export const RESERVED = new Set(['newpairs', 'y', 'admin', 'support', 'dev', 'official', 'team', 'home', 'explore', 'notifications', 'verify', 'api', 'settings', 'search', 'login', 'signup', 'about', 'terms', 'privacy']);
 // The official @y account belongs to this wallet (OFFICIAL_WALLET, else TREASURY).
 export const OFFICIAL = () => { const w = process.env.OFFICIAL_WALLET || process.env.TREASURY || ''; return isPubkey(w) ? w : ''; };
 export const isOfficial = (w) => !!w && w === OFFICIAL();
