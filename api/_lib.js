@@ -210,7 +210,7 @@ export function publicUser(u) {
   if (!u) return null;
   return {
     wallet: u.wallet, handle: u.handle, name: u.name || u.handle, bio: u.bio || '',
-    avatar: u.avatar || '', banner: u.banner || '', joined: u.joined || 0,
+    avatar: u.avatar || '', banner: u.banner || '', website: u.website || '', joined: u.joined || 0,
     verified: !!u.verified || isOfficial(u.wallet), verifiedAt: u.verified || 0, devCoins: Array.isArray(u.devCoins) ? u.devCoins : [],
     official: isOfficial(u.wallet),
   };
@@ -353,6 +353,15 @@ export function slimCoin(t) {
 }
 
 export const IPFS_PREFIX = 'https://ipfs.filebase.io/ipfs/';
+// Profile website: http(s) only, no credentials, max 100 chars. Bare domains get https:// added.
+export function cleanWebsite(v) {
+  let w = String(v || '').trim();
+  if (!w) return '';
+  if (!/^https?:\/\//i.test(w)) w = 'https://' + w;
+  let u; try { u = new URL(w); } catch { return null; }
+  if (!/^https?:$/.test(u.protocol) || u.username || u.password || !u.hostname.includes('.') || w.length > 100) return null;
+  return u.toString().replace(/\/$/, '');
+}
 export const LOCAL_IMG_PREFIX = '/api/upload?id=';
 export const okImageUrl = (u) => !u || (typeof u === 'string' && u.length < 200 && (SITE_IMGS.has(u) ||
   (u.startsWith(IPFS_PREFIX) && /^[A-Za-z0-9]+$/.test(u.slice(IPFS_PREFIX.length))) ||

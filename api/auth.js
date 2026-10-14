@@ -21,7 +21,7 @@ async function createOfficial(wallet, existing) {
   if (taken && taken !== wallet) return existing;
   const u = {
     ...(existing || {}), wallet, handle: OFFICIAL_HANDLE, name: 'Y', bio: 'X locked your coin. Post it on Y. The timeline for memecoins.',
-    avatar: '/y.png', banner: '/y-banner.jpg', joined: existing?.joined || Date.now(), devCoins: existing?.devCoins || [], verified: Date.now(),
+    avatar: '/y.png', banner: '/y-banner.jpg', website: '', joined: existing?.joined || Date.now(), devCoins: existing?.devCoins || [], verified: Date.now(),
   };
   await pipe([
     ['SET', 'h:' + OFFICIAL_HANDLE, wallet],

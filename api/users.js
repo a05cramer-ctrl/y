@@ -1,6 +1,6 @@
 // Users: lookup, search, who-to-follow, profile create/edit, follow/unfollow, follower lists.
 import {
-  run, fail, cmd, pipe, parse, isPubkey, publicUser, getUserRaw, getUsersRaw, RESERVED, notify, okImageUrl, isOfficial, OFFICIAL_HANDLE,
+  run, fail, cmd, pipe, parse, isPubkey, publicUser, getUserRaw, getUsersRaw, RESERVED, notify, okImageUrl, isOfficial, OFFICIAL_HANDLE, cleanWebsite,
 } from './_lib.js';
 
 const HANDLE_RE = /^[a-z0-9_]{3,15}$/;
@@ -36,6 +36,8 @@ async function saveProfile(viewer, body) {
   const avatar = body.avatar !== undefined ? String(body.avatar || '') : existing?.avatar || '';
   const banner = body.banner !== undefined ? String(body.banner || '') : existing?.banner || '';
   if (!okImageUrl(avatar) || !okImageUrl(banner)) fail(400, 'Images must be uploaded through Y');
+  const website = body.website !== undefined ? cleanWebsite(body.website) : (existing?.website || '');
+  if (website === null) fail(400, 'That website link is not valid');
 
   if (!existing || existing.handle !== handle) {
     const ok = await cmd('SET', 'h:' + handle, viewer, 'NX');
@@ -46,7 +48,7 @@ async function saveProfile(viewer, body) {
     if (existing?.handle) await pipe([['DEL', 'h:' + existing.handle], ['ZREM', 'handles', existing.handle]]);
   }
   const u = {
-    ...(existing || {}), wallet: viewer, handle, name, bio, avatar, banner,
+    ...(existing || {}), wallet: viewer, handle, name, bio, avatar, banner, website,
     joined: existing?.joined || Date.now(), devCoins: existing?.devCoins || [], verified: existing?.verified || (isOfficial(viewer) ? Date.now() : 0),
   };
   const followers = await cmd('SCARD', 'fs:' + viewer);
