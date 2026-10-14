@@ -185,10 +185,15 @@ async function toggle(viewer, id, kind, on) {
 async function remove(viewer, id) {
   const p = parse(await cmd('GET', 'post:' + id));
   if (!p) fail(404, 'Already deleted');
-  if (p.wallet !== viewer) fail(403, 'You can only delete your own posts');
+  if (p.wallet !== viewer) {
+    // The author of a post can remove replies left under it.
+    const parent = p.replyTo ? parse(await cmd('GET', 'post:' + p.replyTo)) : null;
+    if (!parent || parent.wallet !== viewer) fail(403, 'You can only delete your own posts or replies to your posts');
+  }
+  const author = p.wallet;
   const c = [
     ['DEL', 'post:' + id, 'pc:' + id, 'likes:' + id, 'rps:' + id],
-    ['ZREM', 'tl:all', id], ['ZREM', 'tl:v', id], ['ZREM', 'tl:u:' + viewer, 'p:' + id], ['ZREM', 'tl:ur:' + viewer, id],
+    ['ZREM', 'tl:all', id], ['ZREM', 'tl:v', id], ['ZREM', 'tl:u:' + author, 'p:' + id], ['ZREM', 'tl:ur:' + author, id],
     ...(p.mints || []).map(m => ['ZREM', 'tl:m:' + m, id]),
     ...(p.tickers || []).map(t => ['ZREM', 'tl:t:' + t, id]),
     ['DEL', 'fy:cache'],

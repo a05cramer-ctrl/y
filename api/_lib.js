@@ -285,7 +285,7 @@ export async function hydrate(entries, viewer) {
     const pu = parent ? users[parent.wallet] : null;
     out.push({
       id: p.id, text: p.text, image: p.image || '', ts: p.ts, replyTo: p.replyTo || null,
-      replyToHandle: pu ? pu.handle : null, mints: p.mints || [], tickers: p.tickers || [],
+      replyToHandle: pu ? pu.handle : null, replyToWallet: pu ? pu.wallet : null, mints: p.mints || [], tickers: p.tickers || [],
       likes: p.likes, reposts: p.reposts, replies: p.replies,
       liked: !!vf[p.id]?.liked, reposted: !!vf[p.id]?.reposted, author,
       repostedBy: e.by && users[e.by] ? { wallet: e.by, handle: users[e.by].handle, name: users[e.by].name } : null,
