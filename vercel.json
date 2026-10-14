@@ -1,6 +1,16 @@
 {
   "functions": {
-    "api/verify.js": { "maxDuration": 60 },
-    "api/dev.js": { "maxDuration": 60 }
-  }
+    "api/verify.js": {
+      "maxDuration": 60
+    },
+    "api/dev.js": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/((?!api/)[^.]*)",
+      "destination": "/index.html"
+    }
+  ]
 }
