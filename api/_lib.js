@@ -300,26 +300,38 @@ export const LAMPORTS = 1_000_000_000;
 export async function rpc(method, params) {
   // Helius when a key is set; the public Solana RPC otherwise (slower, rate limited, but works).
   const key = process.env.HELIUS_API_KEY;
-  const url = key ? 'https://mainnet.helius-rpc.com/?api-key=' + encodeURIComponent(key) : (process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com');
-  const r = await fetch(url, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  });
-  const j = await r.json().catch(() => null);
-  if (!j) fail(502, 'Solana RPC unreachable');
-  if (j.error) fail(502, 'Solana RPC: ' + (j.error.message || 'error'));
-  return j.result;
+  const urls = key ? ['https://mainnet.helius-rpc.com/?api-key=' + encodeURIComponent(key)]
+    : [process.env.SOLANA_RPC_URL, 'https://solana-rpc.publicnode.com', 'https://api.mainnet-beta.solana.com'].filter(Boolean);
+  let last = 'Solana RPC unreachable';
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      });
+      const j = await r.json().catch(() => null);
+      if (!j) { last = 'Solana RPC unreachable'; continue; }
+      if (j.error) {
+        last = 'Solana RPC: ' + (j.error.message || 'error');
+        // Rate limit / access errors: try the next RPC. Real request errors: stop.
+        if ([403, 429, -32005, -32052].includes(+j.error.code) || r.status >= 500 || r.status === 403 || r.status === 429) continue;
+        fail(502, last);
+      }
+      return j.result;
+    } catch (e) { if (e instanceof HttpError) throw e; last = 'Solana RPC unreachable'; }
+  }
+  fail(502, last);
 }
 export const MIN_POST_LAMPORTS = 10_000_000; // 0.01 SOL
-export async function hasMinSol(wallet) {
+export async function solBalance(wallet) {
   const cached = await cmd('GET', 'bal:' + wallet);
-  if (cached !== null) return +cached >= MIN_POST_LAMPORTS;
+  if (cached !== null) return +cached;
   const r = await rpc('getBalance', [wallet, { commitment: 'confirmed' }]);
   const lamports = +(r?.value ?? r ?? 0);
-  const ok = lamports >= MIN_POST_LAMPORTS;
-  await cmd('SET', 'bal:' + wallet, lamports, 'EX', ok ? 600 : 60);
-  return ok;
+  await cmd('SET', 'bal:' + wallet, lamports, 'EX', lamports >= MIN_POST_LAMPORTS ? 600 : 15);
+  return lamports;
 }
+export async function hasMinSol(wallet) { return (await solBalance(wallet)) >= MIN_POST_LAMPORTS; }
 
 /* ---------------- jupiter ---------------- */
 export async function jupSearch(q) {

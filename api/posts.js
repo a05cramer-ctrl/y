@@ -1,7 +1,7 @@
 // Posts: feeds (GET) and create / like / repost / delete (POST ?action=)
 import crypto from 'node:crypto';
 import {
-  run, fail, cmd, pipe, parse, hydrate, extract, requireProfile, notify, hasMinSol, okImageUrl, isPubkey,
+  run, fail, cmd, pipe, parse, hydrate, extract, requireProfile, notify, hasMinSol, solBalance, MIN_POST_LAMPORTS, isOfficial, okImageUrl, isPubkey,
 } from './_lib.js';
 
 const PAGE = 30;
@@ -132,7 +132,11 @@ async function create(viewer, body) {
   const n = await cmd('INCR', `rl:post:${viewer}:${hour}`);
   if (n === 1) await cmd('EXPIRE', `rl:post:${viewer}:${hour}`, 3700);
   if (n > 30) fail(429, 'Slow down: 30 posts per hour max. Try again later.');
-  if (!(await hasMinSol(viewer))) fail(402, 'Your wallet needs at least 0.01 SOL to post. It keeps bots out.');
+  // Gold-check and official accounts already proved they're real; everyone else needs 0.01 SOL in the wallet.
+  if (!user.verified && !isOfficial(viewer)) {
+    const bal = await solBalance(viewer);
+    if (bal < MIN_POST_LAMPORTS) fail(402, `Posting needs 0.01 SOL in your wallet (you have ${(bal / 1e9).toFixed(4)} SOL). It keeps bots out.`);
+  }
 
   const ts = Date.now();
   const id = ts.toString(36) + crypto.randomBytes(4).toString('hex');
